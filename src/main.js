@@ -20,7 +20,6 @@ const lat = 55.753428;
 const coordinateSystemPrimitives = [];
 const center = Cesium.Cartesian3.fromDegrees(lon, lat, HEIGHT);
 const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-console.log("cente", center);
 const drawArc = () => {
   drawSphere();
   clickHandler();
@@ -30,19 +29,61 @@ const drawArc = () => {
 const names = new Set(["X", "Y", "Z", "R", "SPHERE"]);
 
 function drawSphere() {
+  console.log("*&&&");
   const radius = 100;
   const len = 120;
+  //сфера примитив
+  const positionMoscow = {
+    lon: 37.6, //долгота
+    lat: 55.7,
+  };
+  var sphere = new Cesium.Primitive({
+    allowPicking: false, // Отключаем клики по сфере
+    geometryInstances: new Cesium.GeometryInstance({
+      geometry: new Cesium.EllipsoidGeometry({
+        radii: new Cesium.Cartesian3(radius, radius, radius), // Радиусы сферы
+        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT, // Указываем верный vertexFormat
+      }),
+      id: "SPHERE",
+      modelMatrix: Cesium.Matrix4.fromTranslation(center),
+      attributes: {
+        color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+          Cesium.Color.RED.withAlpha(0.2),
+        ), // Полупрозрачный светло-голубой цвет
+      },
+      properties: {
+        name: "SPHERE",
+      },
+    }),
+    appearance: new Cesium.PerInstanceColorAppearance({
+      translucent: true, // Включаем прозрачность
+      flat: true,
+    }),
+    properties: {
+      name: "SPHERE",
+    },
+    releaseGeometryInstances: false,
+  });
+  sphere.name = "SPHERE";
+  // Устанавливаем светло-голубой цвет с прозрачностью
+  sphere.appearance.material = Cesium.Material.fromType("Color", {
+    color: Cesium.Color.RED.withAlpha(0.3), // Полупрозрачный цвет
+  });
+
+  viewer.scene.primitives.add(sphere);
+
   // Создаем сферу
-  const sphere = viewer.entities.add({
+  /*   const sphere = viewer.entities.add({
     position: center,
     properties: {
       name: "SPHERE",
     },
     ellipsoid: {
       radii: new Cesium.Cartesian3(radius, radius, radius),
-      material: Cesium.Color.LIGHTBLUE.withAlpha(0.1), // Полупрозрачный синий цвет
+      material: Cesium.Color.LIGHTBLUE.withAlpha(0.3), // Полупрозрачный синий цвет,
+      clampToGround: false,
     },
-  });
+  }); */
   data.push(sphere);
   const getSurfaceNormal = () => {
     const surfaceNormal = new Cesium.Cartesian3();
@@ -128,6 +169,7 @@ function drawSphere() {
   const yAxis = addAxis(center, yAxisDirection, "GREEN", "Y");
   const zAxis = addAxis(center, zAxisDirection, "PINK", "Z");
   data.push(zAxis);
+
   //полукруг
   const halfCircle = viewer.entities.add({
     name: "R",
@@ -135,13 +177,16 @@ function drawSphere() {
     ellipsoid: {
       // radii: center,
       radii: new Cesium.Cartesian3(radius, radius, radius),
-      innerRadii: new Cesium.Cartesian3(radius - 30, radius - 30, radius - 30),
+      innerRadii: new Cesium.Cartesian3(radius - 5, radius - 5, radius - 5),
       minimumCone: Cesium.Math.toRadians(89.0),
       maximumCone: Cesium.Math.toRadians(91.0),
       minimumClock: Cesium.Math.toRadians(0.0),
       maximumClock: Cesium.Math.toRadians(-180.0),
       material: Cesium.Color.DARKBLUE,
       outline: false,
+    },
+    properties: {
+      name: "R",
     },
   });
   data.push(halfCircle);
@@ -218,18 +263,58 @@ function listenMouseMove(click) {
     primitive.primitive.modelMatrix,
     new Cesium.Cartesian3(),
   );
-
-  const hh = Cesium.Matrix4.fromTranslation(
+  const offsetWithoutCollect = Cesium.Matrix4.fromTranslation(translation);
+  const offsetCollect = Cesium.Matrix4.fromTranslation(
     Cesium.Cartesian3.add(translation, translateOld, new Cesium.Cartesian3()),
   );
 
-  const newModelMatrix = Cesium.Matrix4.multiply(
+  /*   const newModelMatrix = Cesium.Matrix4.multiply(
     primitive.primitive.modelMatrix,
     hh,
     new Cesium.Matrix4(),
-  );
+  ); */
 
-  primitive.primitive.modelMatrix = hh; //newModelMatrix;
+  primitive.primitive.modelMatrix = offsetCollect; //newModelMatrix;
+  // console.log("data", data);
+
+  const halfCircle = data.find((en) => en.properties?.name?.getValue() === "R");
+  if (halfCircle) {
+    const halfposition = halfCircle.position.getValue();
+    console.log("halfposition", halfposition);
+    const newHalfPosiiton = Cesium.Matrix4.multiplyByPoint(
+      offsetWithoutCollect,
+      new Cesium.Cartesian3(halfposition.x, halfposition.y, halfposition.z), //у экрана У направлена вниз поэтому -
+      new Cesium.Cartesian3(),
+    );
+    console.log("newHalfPosiiton", newHalfPosiiton);
+    //halfCircle.position(newHalfPosiiton);
+    halfCircle.position = newHalfPosiiton;
+  }
+  console.log(
+    data,
+    "DATA************",
+    data.map((el) => el?.instanceIds),
+  );
+  const sphere = data.find((en) => en.name === "SPHERE");
+  console.log(sphere, "SPHERE", sphere?.ellipsoid);
+  /*   if (sphere) {
+    const sphereposition = sphere.position?.getValue();
+    console.log("sphereposition", sphereposition);
+    const newspherePosiiton = Cesium.Matrix4.multiplyByPoint(
+      offsetWithoutCollect,
+      new Cesium.Cartesian3(
+        sphereposition.x,
+        sphereposition.y,
+        sphereposition.z,
+      ),
+      new Cesium.Cartesian3(),
+    ); */
+  sphere.modelMatrix = offsetCollect;
+  //halfCircle.position(newHalfPosiiton);
+  // sphere.position = newspherePosiiton;
+  // console.log("newHalfPosiiton", sphere.position.getValue());
+  //  viewer.scene.requestRender();
+  // }
   if (isDragging) {
     cameraBlockBehavior(false);
   }

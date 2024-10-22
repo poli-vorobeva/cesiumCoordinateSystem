@@ -1,0 +1,118 @@
+ const sphere = viewer.entities.add({
+    position: center,
+    properties: {
+      name: "SPHERE",
+    },
+    ellipsoid: {
+      radii: new Cesium.Cartesian3(radius, radius, radius),
+      material: Cesium.Color.LIGHTBLUE.withAlpha(0.3), // Полупрозрачный синий цвет,
+      clampToGround: false,
+    },
+  });
+  data.push(sphere);
+  const getSurfaceNormal = () => {
+    const surfaceNormal = new Cesium.Cartesian3();
+    Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(center, surfaceNormal);
+    return surfaceNormal;
+  };
+  //z
+  const surfaceNormal = getSurfaceNormal();
+  const zAxisDirection = Cesium.Cartesian3.multiplyByScalar(
+    surfaceNormal,
+    len,
+    new Cesium.Cartesian3(),
+  );
+
+  //x
+  const arbitrarVector = Cesium.Cartesian3.UNIT_X;
+  const xAxisDirection = Cesium.Cartesian3.cross(
+    arbitrarVector,
+    zAxisDirection,
+    new Cesium.Cartesian3(),
+  );
+  Cesium.Cartesian3.normalize(xAxisDirection, xAxisDirection);
+  Cesium.Cartesian3.multiplyByScalar(xAxisDirection, -len, xAxisDirection);
+
+  //y
+  const yAxisDirection = Cesium.Cartesian3.cross(
+    zAxisDirection,
+    xAxisDirection,
+    new Cesium.Cartesian3(),
+  );
+  Cesium.Cartesian3.normalize(yAxisDirection, yAxisDirection);
+  Cesium.Cartesian3.multiplyByScalar(yAxisDirection, -len, yAxisDirection);
+
+  //оси xyz
+  function normalizeVector(vector) {
+    const magnitude = Cesium.Cartesian3.magnitude(vector);
+    if (magnitude === 0) {
+      //const config = {
+      //   type: 'error',
+      //  message: 'Не удается нормализовать вектор нулевой длины',
+      //  duration: 7000,
+      //};
+      // this.snackbarService.open(config);
+      //return;
+    }
+    return Cesium.Cartesian3.normalize(vector, new Cesium.Cartesian3());
+  }
+  function addAxis(position, axisVector, color, name) {
+    const normalizedAxis = normalizeVector(axisVector); // Нормализация с проверкой
+    const offset = Cesium.Cartesian3.multiplyByScalar(
+      normalizedAxis,
+      len / 10,
+      new Cesium.Cartesian3(),
+    );
+    const startPoint = Cesium.Cartesian3.add(
+      position,
+      offset,
+      new Cesium.Cartesian3(),
+    );
+    // Добавление линии оси
+    const line = viewer.entities.add({
+      polyline: {
+        name,
+        positions: [
+          startPoint,
+          Cesium.Cartesian3.add(position, axisVector, new Cesium.Cartesian3()),
+        ],
+        width: 10.0,
+        material: Cesium.Color[color],
+        clampToGround: false,
+      },
+      properties: {
+        axis: axisVector,
+        name,
+        movement: true, // Флаг для перемещения
+      },
+    });
+    // this.addRotationPlane(position, normalizedAxis);
+    return line;
+  }
+
+  const xAxis = addAxis(center, xAxisDirection, "RED", "X");
+  const yAxis = addAxis(center, yAxisDirection, "GREEN", "Y");
+  const zAxis = addAxis(center, zAxisDirection, "PINK", "Z");
+  data.push(zAxis);
+  //полукруг
+  const halfCircle = viewer.entities.add({
+    name: "R",
+    position: center,
+    ellipsoid: {
+      // radii: center,
+      radii: new Cesium.Cartesian3(radius, radius, radius),
+      innerRadii: new Cesium.Cartesian3(radius - 5, radius - 5, radius - 5),
+      minimumCone: Cesium.Math.toRadians(89.0),
+      maximumCone: Cesium.Math.toRadians(91.0),
+      minimumClock: Cesium.Math.toRadians(0.0),
+      maximumClock: Cesium.Math.toRadians(-180.0),
+      material: Cesium.Color.DARKBLUE,
+      outline: false,
+    },
+    properties: {
+      name: "R",
+    },
+  });
+  data.push(halfCircle);
+  // viewer.zoomTo(viewer.entities);
+  // Создаем круг как полигон
