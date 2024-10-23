@@ -223,14 +223,14 @@ function drawSphere() {
     const ang = an * i;
     const x = radius * Math.cos(ang);
     const y = radius * Math.sin(ang);
-    positions.push(
+    /*  positions.push(
       Cesium.Matrix4.multiplyByPoint(
         originalMatrix,
         new Cesium.Cartesian3(x, y, 0),
         new Cesium.Cartesian3(),
       ),
-    );
-    // positions.push(new Cesium.Cartesian3(x, y, 0));
+    ); */
+    positions.push(new Cesium.Cartesian3(x, y, 0));
   }
   //-----------------
 
@@ -261,8 +261,10 @@ function drawSphere() {
   });
 
   // Создаем примитив с материалом
-  const primitive = new Cesium.Primitive({
+  const halfCircle = new Cesium.Primitive({
+    name: "R",
     geometryInstances: [geometryInstance],
+    modelMatrix: originalMatrix,
     appearance: new Cesium.MaterialAppearance({
       material: new Cesium.Material({
         fabric: {
@@ -279,9 +281,10 @@ function drawSphere() {
       },
     }),
   });
-
+  halfCircle.name = "R";
+  data.push(halfCircle);
   // Добавляем примитив на сцену
-  viewer.scene.primitives.add(primitive);
+  viewer.scene.primitives.add(halfCircle);
 
   viewer.zoomTo(viewer.entities);
   // Создаем круг как полигон
@@ -371,9 +374,15 @@ const moveElements = (click) => {
   // console.log("data", data);
 
   const halfCircle = data.find((en) => en.name === "R");
-  // console.log(halfCircle, "HC");
+  console.log(halfCircle, "HC");
   if (halfCircle) {
-    halfCircle.modelMatrix = offsetCollect;
+    Cesium.Matrix4.multiply(
+      offsetWithoutCollect,
+      halfCircle.modelMatrix,
+
+      halfCircle.modelMatrix,
+    );
+    // halfCircle.modelMatrix = offsetCollect;
     //  const halfposition = halfCircle.position.getValue();
     // console.log("halfposition", halfposition);
     /*  const newHalfPosiiton = Cesium.Matrix4.multiplyByPoint(
@@ -396,40 +405,56 @@ const moveElements = (click) => {
   }
 };
 function listenMouseMove(click) {
-  console.log("primitiveName", primitive?.id?.name);
-  if (primitive?.id?.name === "R") {
+  // console.log("primitiveName", primitive?.id?.name);
+  if (primitive?.id?.name === "R" || primitive?.primitive?.name === "R") {
     //поворот
-    console.log("primitiveeee", primitive.primitive);
+    console.log(
+      "primitiveeee",
+      primitive?.primitive,
+      primitive?.primitive?.modelMatrix,
+      // Cesium.Matrix4.getTranslation(primitive.primitive.modelMatrix),
+    );
     //  const center = primitive.id.position.getValue();
-    /*   const centerModelMatrix = Cesium.Matrix4.getTranslation(
+    const centerModelMatrix = Cesium.Matrix4.getTranslation(
       primitive.primitive.modelMatrix,
-    ); */
-    const inverse = viewer.camera.inverseViewMatrix;
+      new Cesium.Cartesian3(),
+    );
+    console.log("centerModelMatrix", centerModelMatrix);
+    const surfaceNormal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
+      centerModelMatrix,
+      new Cesium.Cartesian3(),
+    );
+    const angleR = getAngle(surfaceNormal, centerModelMatrix, click);
+
+    /*  const inverse = viewer.camera.inverseViewMatrix;
+    console.log("inverse", inverse);
     // console.log("CLCLC", click);
     const startPoint = getCartesian3ByClick(inverse, click.startPosition);
     const endPoint = getCartesian3ByClick(inverse, click.endPosition);
-
+    console.log("startPoint", startPoint);
     const firstVector = Cesium.Cartesian3.subtract(
       startPoint,
-      primitive?.id?.center,
+      centerModelMatrix,
       new Cesium.Cartesian3(),
     );
+    console.log("firstVector", firstVector);
     const secondVector = Cesium.Cartesian3.subtract(
       endPoint,
-      primitive?.id?.center,
+      centerModelMatrix,
       new Cesium.Cartesian3(),
     );
 
     const angle = Cesium.Cartesian3.angleBetween(firstVector, secondVector);
-    const angleDegr = (angle * 180) / Math.PI;
+    console.log("angle", angle); */
+    /*  const angleDegr = (angle * 180) / Math.PI;
     console.log("angle", angleDegr);
     // rotateModel();
-    console.log("brfore", primitive.primitive.modelMatrix);
-
+    console.log("brfore", primitive.primitive.modelMatrix); */
+    console.log("angleR", angleR);
     const rotationMatrix4 = Cesium.Matrix4.fromRotationTranslation(
-      Cesium.Matrix3.fromRotationY(angle),
+      Cesium.Matrix3.fromRotationZ(angleR),
     );
-
+    console.log("brfore", primitive.primitive.modelMatrix);
     Cesium.Matrix4.multiply(
       primitive.primitive.modelMatrix,
       rotationMatrix4,
@@ -477,11 +502,13 @@ function listenMouseDown(click) {
         el.id?.properties?.name?.toString() === "X" ||
         el?.id?.name === "R" ||
         el?.name === "R" ||
+        el?.primitive?.name === "R" ||
         el.properties?.name?.getValue() === "R",
     );
   console.log("t", t);
   if (t) {
     primitive = t;
+    cameraBlockBehavior(false);
   } else {
     cameraBlockBehavior(true);
     return;
@@ -526,19 +553,18 @@ function rotateModel(tileset, axis, ang) {
 function getAngle(normal, center, click) {
   const distance = -Cesium.Cartesian3.dot(normal, center);
 
-  const rayStart = viewer.camera.getPickRay(click.StartPosition);
-  const rayEnd = viewer.camera.getPickRay(click.EndPosition);
-
+  const rayStart = viewer.camera.getPickRay(click.startPosition);
+  const rayEnd = viewer.camera.getPickRay(click.endPosition);
   const negateNormal = Cesium.Cartesian3.negate(
     normal,
     new Cesium.Cartesian3(),
   );
 
-  const inclineCameraStart = Cartesian3.angleBetween(
+  const inclineCameraStart = Cesium.Cartesian3.angleBetween(
     negateNormal,
     rayStart.direction,
   );
-  const inclineCameraEnd = Cartesian3.angleBetween(
+  const inclineCameraEnd = Cesium.Cartesian3.angleBetween(
     negateNormal,
     rayEnd.direction,
   );
@@ -580,8 +606,14 @@ function getAngle(normal, center, click) {
     center,
     new Cesium.Cartesian3(),
   );
+  const cross = Cesium.Cartesian3.cross(
+    vecToEnd,
+    vecToStart,
+    new Cesium.Cartesian3(),
+  );
+  const sign = Math.sign(Cesium.Cartesian3.dot(normal, cross));
 
-  return Cartesian3.angleBetween(vecToStart, vecToEnd);
+  return sign * Cesium.Cartesian3.angleBetween(vecToStart, vecToEnd);
 }
 
 /*   const halfC = viewer.entities.add({
