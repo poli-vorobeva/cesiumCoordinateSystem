@@ -7,34 +7,26 @@ let model = null;
 const viewer = new Cesium.Viewer("cesiumContainer", {
   terrain: Cesium.Terrain.fromWorldTerrain(),
 });
-/* const d = {
-  RED: new Cesium.PolylineArrowMaterialProperty(Cesium.Color.fromCssColorString("RED")),
-  GREEN: new Cesium.PolylineArrowMaterialProperty(Cesium.Color.fromCssColorString("GREEN")),
-  PINK: new Cesium.PolylineArrowMaterialProperty(Cesium.Color.fromCssColorString("PINK")),
-}; */
+
 const HEIGHT = 3000;
 let primitive = null;
 const data = [];
 const worldTileset = await Cesium.createGooglePhotorealistic3DTileset();
 viewer.scene.primitives.add(worldTileset);
-const currentPrimitives = new Set();
+
 const buildingTileset = await Cesium.createOsmBuildingsAsync();
 viewer.scene.primitives.add(buildingTileset);
 
 const lon = 37.631099;
 const lat = 55.753428;
-const coordinateSystemPrimitives = [];
 const center = Cesium.Cartesian3.fromDegrees(lon, lat, HEIGHT);
 const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-const drawArc = () => {
-  drawSphere();
+const draw = () => {
+  drawScene();
   clickHandler();
-  // drawArrow()
-  //createArc(center,1002,Cesium.Math.toRadians(0),Cesium.Math.toRadians(90.0),Cesium.Color.BLUEVIOLET)
 };
-const names = new Set(["X", "Y", "Z", "R", "SPHERE"]);
 
-async function drawSphere() {
+async function drawScene() {
   const radius = 30;
   const len = 40;
   const modelTileset = await drawModel(
@@ -67,38 +59,9 @@ async function drawSphere() {
     new Cesium.Cartesian3(),
   );
   //сфера примитив
-  var sphere = new Cesium.Primitive({
-    allowPicking: false, // Отключаем клики по сфере
-    geometryInstances: new Cesium.GeometryInstance({
-      geometry: new Cesium.EllipsoidGeometry({
-        radii: new Cesium.Cartesian3(radius, radius, radius), // Радиусы сферы
-        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT, // Указываем верный vertexFormat
-      }),
-      id: "SPHERE",
-      modelMatrix: Cesium.Matrix4.fromTranslation(coordSystemCenter),
-      attributes: {
-        color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          Cesium.Color.LIGHTBLUE.withAlpha(0.2),
-        ),
-      },
-      properties: {
-        name: "SPHERE",
-      },
-    }),
-    appearance: new Cesium.PerInstanceColorAppearance({
-      translucent: true, // Включаем прозрачность
-      flat: true,
-    }),
-    releaseGeometryInstances: false,
-  });
-  sphere.name = "SPHERE";
-  // Устанавливаем светло-голубой цвет с прозрачностью
-  sphere.appearance.material = Cesium.Material.fromType("Color", {
-    color: Cesium.Color.LIGHTBLUE.withAlpha(0.3), // Полупрозрачный цвет
-  });
+  var sphere = drawSphere(radius, coordSystemCenter);
 
   viewer.scene.primitives.add(sphere);
-
   data.push(sphere);
 
   //x
@@ -121,90 +84,10 @@ async function drawSphere() {
   Cesium.Cartesian3.multiplyByScalar(yAxisDirection, -len, yAxisDirection);
 
   //оси xyz
-  function normalizeVector(vector) {
-    const magnitude = Cesium.Cartesian3.magnitude(vector);
-    if (magnitude === 0) {
-      //const config = {
-      //   type: 'error',
-      //  message: 'Не удается нормализовать вектор нулевой длины',
-      //  duration: 7000,
-      //};
-      // this.snackbarService.open(config);
-      //return;
-    }
-    return Cesium.Cartesian3.normalize(vector, new Cesium.Cartesian3());
-  }
-  function addAxis(position, axisVector, color, name) {
-    const normalizedAxis = normalizeVector(axisVector); // Нормализация с проверкой
-    const offset = Cesium.Cartesian3.multiplyByScalar(
-      normalizedAxis,
-      len / 10,
-      new Cesium.Cartesian3(),
-    );
-    const startPoint = Cesium.Cartesian3.add(
-      position,
-      offset,
-      new Cesium.Cartesian3(),
-    );
-    // Добавление линии оси
-    const line = viewer.entities.add({
-      polyline: {
-        name,
-        positions: [
-          startPoint,
-          Cesium.Cartesian3.add(position, axisVector, new Cesium.Cartesian3()),
-        ],
-        width: 10.0,
-        material: Cesium.Color[color],
-        // new Cesium.PolylineArrowMaterialProperty(Cesium.Color.fromCssColorString(color)),
-        clampToGround: false,
-      },
-      properties: {
-        axis: axisVector,
-        name,
-        movement: true, // Флаг для перемещения
-      },
-    });
-    // this.addRotationPlane(position, normalizedAxis);
-    return line;
-  }
-  function copyAddAxis(color, name) {
-    const line = viewer.entities.add({
-      polyline: {
-        name,
-        positions: [
-          new Cesium.Cartesian3(
-            name === "X" ? len / 10 : 0,
-            name === "Y" ? len / 10 : 0,
-            name === "Z" ? len / 10 : 0,
-          ),
-          new Cesium.Cartesian3(
-            name === "X" ? len : 0,
-            name === "Y" ? len : 0,
-            name === "Z" ? len : 0,
-          ),
-        ],
-        width: 10.0,
-        material: Cesium.Color[color],
-        // new Cesium.PolylineArrowMaterialProperty(Cesium.Color.fromCssColorString(color)),
-        clampToGround: false,
-      },
-      properties: {
-        //axis: axisVector,
-        name,
-        // movement: true, // Флаг для перемещения
-      },
-    });
-    // this.addRotationPlane(position, normalizedAxis);
-    return line;
-  }
 
-  /*  const xAxis = copyAddAxis("RED", "X");
-  const yAxis = copyAddAxis("GREEN", "Y");
-  const zAxis = copyAddAxis("PINK", "Z"); */
-  const xAxis = addAxis(coordSystemCenter, xAxisDirection, "RED", "X");
-  const yAxis = addAxis(coordSystemCenter, yAxisDirection, "GREEN", "Y");
-  const zAxis = addAxis(coordSystemCenter, zAxisDirection, "PINK", "Z");
+  const xAxis = addAxis(len, coordSystemCenter, xAxisDirection, "RED", "X");
+  const yAxis = addAxis(len, coordSystemCenter, yAxisDirection, "GREEN", "Y");
+  const zAxis = addAxis(len, coordSystemCenter, zAxisDirection, "PINK", "Z");
   data.push(zAxis);
   //полукруг
 
@@ -225,18 +108,9 @@ async function drawSphere() {
     const ang = an * i;
     const x = radius * Math.cos(ang);
     const y = radius * Math.sin(ang);
-    /*  positions.push(
-      Cesium.Matrix4.multiplyByPoint(
-        originalMatrix,
-        new Cesium.Cartesian3(x, y, 0),
-        new Cesium.Cartesian3(),
-      ),
-    ); */
     positions.push(new Cesium.Cartesian3(x, y, 0));
   }
-  //-----------------
 
-  // Профиль - прямоугольник
   function computeCircle(radius) {
     const positions = [];
     for (let i = 0; i < 360; i++) {
@@ -251,10 +125,9 @@ async function drawSphere() {
     return positions;
   }
   // Создаем геометрию объема
-  console.log("positions", positions);
   const polylineVolume = new Cesium.PolylineVolumeGeometry({
     polylinePositions: positions,
-    shapePositions: computeCircle(0.5),
+    shapePositions: computeCircle(0.8),
   });
 
   // Создаем экземпляр геометрии
@@ -272,7 +145,7 @@ async function drawSphere() {
         fabric: {
           type: "Color",
           uniforms: {
-            color: Cesium.Color.BLUE,
+            color: Cesium.Color.LIGHTBLUE,
           },
         },
       }),
@@ -285,15 +158,12 @@ async function drawSphere() {
   });
   halfCircle.name = "R";
   data.push(halfCircle);
-  // Добавляем примитив на сцену
   viewer.scene.primitives.add(halfCircle);
-
   viewer.zoomTo(viewer.entities);
-  // Создаем круг как полигон
 }
 
 const button = document.getElementById("draw");
-button.addEventListener("click", drawArc);
+button.addEventListener("click", draw);
 let isDragging = false;
 
 function cameraBlockBehavior(isNormalBehavior) {
@@ -308,9 +178,7 @@ function listenMoveStop(click) {
   handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_UP);
   clickHandler();
   cameraBlockBehavior(true);
-  // Здесь ваш код, который будет выполняться при нажатии на левую кнопку мыши
 }
-let t = false;
 function getCartesian3ByClick(matrix, click) {
   return Cesium.Matrix4.multiplyByPoint(
     matrix,
@@ -323,27 +191,14 @@ const moveElements = (click) => {
   if (click.startPosition.y === click.endPosition.y) return;
 
   const cartesianStart = getCartesian3ByClick(inverse, click.startPosition);
-
-  // Преобразуем декартовы координаты в геодезические
-  const cartographicStart = Cesium.Cartographic.fromCartesian(cartesianStart);
-  //const longitudeStart = Cesium.Math.toDegrees(cartographicStart.longitude); //*(direction==='up'?-1:1);
-  //const latitudeStart = Cesium.Math.toDegrees(cartographicStart.latitude);
-
   const cartesian = getCartesian3ByClick(inverse, click.endPosition);
-  // Преобразуем декартовы координаты в геодезические
-  const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
-  //const longitude = Cesium.Math.toDegrees(cartographic.longitude); //*(direction==='up'?-1:1);
-  //const latitude = Cesium.Math.toDegrees(cartographic.latitude);
-
   const sub = Cesium.Cartesian3.subtract(
     cartesian,
     cartesianStart,
     new Cesium.Cartesian3(),
   );
   const axisVector = primitive.id?.properties.axis.getValue();
-  //const magnitude = Cesium.Cartesian3.magnitude(sub);
   const axisvectorMagnitude = Cesium.Cartesian3.magnitude(axisVector);
-  const name = primitive.id?.properties.name.getValue();
   let dot = Cesium.Cartesian3.dot(sub, axisVector);
 
   dot /= axisvectorMagnitude * axisvectorMagnitude; //высчитываем коэф шага движения !!!!
@@ -353,22 +208,9 @@ const moveElements = (click) => {
     dot,
     new Cesium.Cartesian3(),
   );
-  //primitive.primitive.modelMatrix.ge;
 
-  /*   const translateOld = Cesium.Matrix4.getTranslation(
-    primitive.primitive.modelMatrix,
-    new Cesium.Cartesian3(),
-  ); */
   const offsetWithoutCollect = Cesium.Matrix4.fromTranslation(translation);
-  /*  const offsetCollect = Cesium.Matrix4.fromTranslation(
-    Cesium.Cartesian3.add(translation, translateOld, new Cesium.Cartesian3()),
-  ); */
 
-  /*   const newModelMatrix = Cesium.Matrix4.multiply(
-    primitive.primitive.modelMatrix,
-    hh,
-    new Cesium.Matrix4(),
-  ); */
   Cesium.Matrix4.multiply(
     offsetWithoutCollect,
     model.modelMatrix,
@@ -379,124 +221,67 @@ const moveElements = (click) => {
     primitive.primitive.modelMatrix,
     primitive.primitive.modelMatrix,
   );
-  // primitive.primitive.modelMatrix = offsetCollect; //newModelMatrix;
-
-  // console.log("data", data);
-
-  const halfCircle = data.find((en) => en.name === "R");
-  /* console.log(halfCircle, "HC"); */
+  const halfCircle = data.find(isRotationActive);
   if (halfCircle) {
     Cesium.Matrix4.multiply(
       offsetWithoutCollect,
       halfCircle.modelMatrix,
       halfCircle.modelMatrix,
     );
-
-    // halfCircle.modelMatrix = offsetCollect;
-    //  const halfposition = halfCircle.position.getValue();
-    // console.log("halfposition", halfposition);
-    /*  const newHalfPosiiton = Cesium.Matrix4.multiplyByPoint(
-      offsetWithoutCollect,
-      new Cesium.Cartesian3(halfposition.x, halfposition.y, halfposition.z), //у экрана У направлена вниз поэтому -
-      new Cesium.Cartesian3(),
-    ); */
-    //console.log("newHalfPosiiton", newHalfPosiiton);
-    //halfCircle.position(newHalfPosiiton);
-    //halfCircle.position = newHalfPosiiton;
   }
 
   const sphere = data.find((en) => en.name === "SPHERE");
-  // console.log(sphere, "SPHERE", sphere?.ellipsoid);
-
-  sphere.modelMatrix = offsetCollect;
+  Cesium.Matrix4.multiply(
+    offsetWithoutCollect,
+    sphere.modelMatrix,
+    sphere.modelMatrix,
+  );
 
   if (isDragging) {
     cameraBlockBehavior(false);
   }
 };
-function listenMouseMove(click) {
-  // console.log("primitiveName", primitive?.id?.name);
-  if (primitive?.id?.name === "R" || primitive?.primitive?.name === "R") {
-    //поворот
-    console.log(
-      "primitiveeee",
-      primitive?.primitive,
-      primitive?.primitive?.modelMatrix,
-      // Cesium.Matrix4.getTranslation(primitive.primitive.modelMatrix),
-    );
-    //  const center = primitive.id.position.getValue();
-    const centerModelMatrix = Cesium.Matrix4.getTranslation(
-      primitive.primitive.modelMatrix,
-      new Cesium.Cartesian3(),
-    );
-    console.log("centerModelMatrix", centerModelMatrix);
-    const surfaceNormal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
-      centerModelMatrix,
-      new Cesium.Cartesian3(),
-    );
-    const angleR = getAngle(surfaceNormal, centerModelMatrix, click);
 
-    console.log("angleR", angleR);
-    const rotationMatrix4 = Cesium.Matrix4.fromRotationTranslation(
-      Cesium.Matrix3.fromRotationZ(angleR),
-    );
-    console.log("brfore", primitive.primitive.modelMatrix);
-    Cesium.Matrix4.multiply(
-      primitive.primitive.modelMatrix,
-      rotationMatrix4,
-      primitive.primitive.modelMatrix,
-    );
-    Cesium.Matrix4.multiply(
-      model.modelMatrix,
-      rotationMatrix4,
-      model.modelMatrix,
-    );
-    console.log("AFTER---", primitive.primitive.modelMatrix);
-    //надо определить угол поворота и вызвать для дуги и здания rotate
+function rotateElements(click) {
+  //поворот
+
+  const centerModelMatrix = Cesium.Matrix4.getTranslation(
+    primitive.primitive.modelMatrix,
+    new Cesium.Cartesian3(),
+  );
+  const surfaceNormal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
+    centerModelMatrix,
+    new Cesium.Cartesian3(),
+  );
+  const angleR = getAngle(surfaceNormal, centerModelMatrix, click);
+
+  const rotationMatrix4 = Cesium.Matrix4.fromRotationTranslation(
+    Cesium.Matrix3.fromRotationZ(angleR),
+  );
+
+  Cesium.Matrix4.multiply(
+    primitive.primitive.modelMatrix,
+    rotationMatrix4,
+    primitive.primitive.modelMatrix,
+  );
+  Cesium.Matrix4.multiply(
+    model.modelMatrix,
+    rotationMatrix4,
+    model.modelMatrix,
+  );
+}
+
+function listenMouseMove(click) {
+  if (isRotationActive(primitive)) {
+    rotateElements(click);
   } else {
     moveElements(click);
   }
   handler.setInputAction(listenMoveStop, Cesium.ScreenSpaceEventType.LEFT_UP);
 }
 
-function debounce(func, wait) {
-  let timeout;
-  if (isDragging) {
-    // cameraBlockBehavior(false);
-  }
-  return function () {
-    const context = this;
-
-    const args = arguments;
-    clearTimeout(timeout);
-    timeout = setTimeout(() => {
-      //isDragging = false;
-      func.apply(context, args);
-    }, wait);
-  };
-}
-const debouncedMouseMove = debounce(listenMouseMove, 50); // Вызываем функцию каждые 100 мс
-
 function listenMouseDown(click) {
-  console.log("down listen", click);
-  console.log(
-    "viewer.scene.drillPick(click.position)",
-    viewer.scene.drillPick(click.position),
-  );
-
-  const t = viewer.scene
-    .drillPick(click.position)
-    .find(
-      (el) =>
-        el.id?.properties?.name?.toString() === "Z" ||
-        el.id?.properties?.name?.toString() === "Y" ||
-        el.id?.properties?.name?.toString() === "X" ||
-        el?.id?.name === "R" ||
-        el?.name === "R" ||
-        el?.primitive?.name === "R" ||
-        el.properties?.name?.getValue() === "R",
-    );
-  console.log("t", t);
+  const t = viewer.scene.drillPick(click.position).find(isCoordinateClick);
   if (t) {
     primitive = t;
     cameraBlockBehavior(false);
@@ -507,7 +292,6 @@ function listenMouseDown(click) {
   isDragging = true;
   handler.setInputAction(
     listenMouseMove,
-    //debouncedMouseMove,
     Cesium.ScreenSpaceEventType.MOUSE_MOVE,
   );
 }
@@ -518,28 +302,6 @@ function clickHandler() {
   );
 }
 
-function rotateModel(tileset, axis, ang) {
-  if (tileset) {
-    const angle = Cesium.Math.toRadians(ang); // вращаем на 5 градусов
-    let rotationMatrix; //: Cesium.Matrix3;
-
-    /*  if (Cesium.Cartesian3.equals(axis, Cesium.Cartesian3.UNIT_X)) {
-      rotationMatrix = Cesium.Matrix3.fromRotationX(angle);
-    } else if (Cesium.Cartesian3.equals(axis, Cesium.Cartesian3.UNIT_Y)) { */
-    rotationMatrix = Cesium.Matrix3.fromRotationY(angle);
-    /*  } else {
-      rotationMatrix = Cesium.Matrix3.fromRotationZ(angle);
-    } */
-
-    const rotationMatrix4 =
-      Cesium.Matrix4.fromRotationTranslation(rotationMatrix);
-    Cesium.Matrix4.multiply(
-      tileset.root.transform,
-      rotationMatrix4,
-      tileset.root.transform,
-    );
-  }
-}
 function getAngle(normal, center, click) {
   const distance = -Cesium.Cartesian3.dot(normal, center);
 
@@ -606,94 +368,11 @@ function getAngle(normal, center, click) {
   return sign * Cesium.Cartesian3.angleBetween(vecToStart, vecToEnd);
 }
 
-/*   const halfC = viewer.entities.add({
-    polyline: {
-      positions: positions,
-      width: 10.0,
-      material: Cesium.Color.YELLOW,
-      modelMatrix: originalMatrix,
-      // new Cesium.PolylineArrowMaterialProperty(Cesium.Color.fromCssColorString(color)),
-      clampToGround: false,
-    },
-    // modelMatrix: originalMatrix,
-    properties: {
-      //movement: true, // Флаг для перемещения
-    },
-  }); */
-//-----------------------------------Полукруг
-/*   var halfCircle = new Cesium.Primitive({
-    // allowPicking: true, // Отключаем клики по сфере
-    releaseGeometryInstances: true,
-    geometryInstances: new Cesium.GeometryInstance({
-      geometry: new Cesium.EllipsoidGeometry({
-        radii: new Cesium.Cartesian3(radius, radius, radius),
-        innerRadii: new Cesium.Cartesian3(
-          radius * 0.95,
-          radius * 0.95,
-          radius * 0.95,
-        ),
-        vertexFormat: Cesium.VertexFormat.ALL,
-        minimumCone: Cesium.Math.toRadians(89.0),
-        maximumCone: Cesium.Math.toRadians(91.0),
-        minimumClock: Cesium.Math.toRadians(0.0),
-        maximumClock: Cesium.Math.toRadians(-180.0),
-        //  vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
-      }),
-      id: "R",
-      //modelMatrix: originalMatrix,
-      attributes: {
-        color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          Cesium.Color.BLUE.withAlpha(0.9),
-        ), // Полупрозрачный светло-голубой цвет
-      },
-    }),
-
-    modelMatrix: originalMatrix,
-    appearance: new Cesium.MaterialAppearance({
-      material: new Cesium.Material({
-        fabric: {
-          type: "Color",
-          uniforms: {
-            color: Cesium.Color.WHITE.withAlpha(0.35),
-          },
-        },
-      }),
-    }),
-    // releaseGeometryInstances: false,
-  });
-  console.log("HALF", halfCircle);
-  viewer.scene.primitives.add(halfCircle); */
-
 async function drawModel(position, url) {
   try {
-    //   console.log("$$$$", position);
-    /*   const cartographic = Cesium.Cartographic.fromCartesian(
-      new Cartesian3(position.x, position.y, position.z),
-    ); */
-    //console.log("$$$$2", cartographic);
-    /*  const adjustedPosition = Cesium.Cartesian3.fromRadians(
-      cartographic.longitude,
-      cartographic.latitude,
-      cartographic.height,
-    ); */
-    // console.log("###", adjustedPosition);
     const originalMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position);
-    /* const dataForService = {
-      id: "BUILD",
-      checked: true,
-      url,
-      type: "PRIMITIVE",
-      options: {
-        modelMatrix: originalMatrix,
-      },
-    }; */
-    //console.log("originalMatrix", originalMatrix);
-    // console.log("dataForService", dataForService);
     const tilest = await Cesium.Cesium3DTileset.fromUrl(url);
-    console.log("T", tilest);
     tilest.modelMatrix = originalMatrix;
-    //await Cesium.Cesium3DTileset(dataForService);
-    //  console.log("666", tilest);
     viewer.scene.primitives.add(tilest);
     return tilest;
   } catch (e) {
@@ -701,47 +380,23 @@ async function drawModel(position, url) {
   }
 }
 
-/*   primitive.appearance.material = Cesium.Material.fromType("Color", {
-    color: Cesium.Color.YELLOW, // Полупрозрачный цвет
-  }); */
-// Добавляем примитив в сцену
-
-//console.log(viewer.scene.primitives);
-// viewer.entities.modelMatrix = originalMatrix;
-// halfC.id = "R";
-// halfC.name = "R";
-//const en = viewer.entities.getById(halfC.id);
-
-/*  console.log(
-    "viewer.entities.getById('R').modelMatrix",
-    viewer.entities.getById(halfC.id),
-  ); */
-/*  en.modelMatrix = originalMatrix;
-  console.log("HHHHHH", halfC); */
-/* halfC.center = Cesium.Cartesian3.clone(center);
-  data.push(halfC); */
-/*  var halfCircle = new Cesium.Primitive({
+function drawSphere(radius, coordSystemCenter) {
+  const sphere = new Cesium.Primitive({
     allowPicking: false, // Отключаем клики по сфере
     geometryInstances: new Cesium.GeometryInstance({
       geometry: new Cesium.EllipsoidGeometry({
-        radii: new Cesium.Cartesian3(radius, radius, radius),
-        innerRadii: new Cesium.Cartesian3(
-          radius * 0.95,
-          radius * 0.95,
-          radius * 0.95,
-        ),
-        minimumCone: Cesium.Math.toRadians(89.0),
-        maximumCone: Cesium.Math.toRadians(91.0),
-        minimumClock: Cesium.Math.toRadians(0.0),
-        maximumClock: Cesium.Math.toRadians(-180.0),
-        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
+        radii: new Cesium.Cartesian3(radius, radius, radius), // Радиусы сферы
+        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT, // Указываем верный vertexFormat
       }),
-      id: "R",
-      modelMatrix: originalMatrix,
+      id: "SPHERE",
+      modelMatrix: Cesium.Matrix4.fromTranslation(coordSystemCenter),
       attributes: {
         color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          Cesium.Color.BLUE.withAlpha(0.9),
-        ), // Полупрозрачный светло-голубой цвет
+          Cesium.Color.LIGHTBLUE.withAlpha(0.2),
+        ),
+      },
+      properties: {
+        name: "SPHERE",
       },
     }),
     appearance: new Cesium.PerInstanceColorAppearance({
@@ -750,26 +405,91 @@ async function drawModel(position, url) {
     }),
     releaseGeometryInstances: false,
   });
-  console.log("HALF", halfCircle);
-  viewer.scene.primitives.add(halfCircle); */
-/*  const halfCircle = viewer.entities.add({
-    name: "R",
-    position: center,
-    ellipsoid: {
-      // radii: center,
-      radii: new Cesium.Cartesian3(radius, radius, radius),
-      innerRadii: new Cesium.Cartesian3(radius - 5, radius - 5, radius - 5),
-      minimumCone: Cesium.Math.toRadians(89.0),
-      maximumCone: Cesium.Math.toRadians(91.0),
-      minimumClock: Cesium.Math.toRadians(0.0),
-      maximumClock: Cesium.Math.toRadians(-180.0),
-      material: Cesium.Color.DARKBLUE,
-      outline: false,
+  sphere.name = "SPHERE";
+  // Устанавливаем светло-голубой цвет с прозрачностью
+  sphere.appearance.material = Cesium.Material.fromType("Color", {
+    color: Cesium.Color.LIGHTBLUE.withAlpha(0.3), // Полупрозрачный цвет
+  });
+  return sphere;
+}
+function normalizeVector(vector) {
+  const magnitude = Cesium.Cartesian3.magnitude(vector);
+  if (magnitude === 0) {
+    //const config = {
+    //   type: 'error',
+    //  message: 'Не удается нормализовать вектор нулевой длины',
+    //  duration: 7000,
+    //};
+    // this.snackbarService.open(config);
+    //return;
+  }
+  return Cesium.Cartesian3.normalize(vector, new Cesium.Cartesian3());
+}
+function addAxis(len, position, axisVector, color, name) {
+  const normalizedAxis = normalizeVector(axisVector); // Нормализация с проверкой
+  const offset = Cesium.Cartesian3.multiplyByScalar(
+    normalizedAxis,
+    len / 10,
+    new Cesium.Cartesian3(),
+  );
+  const startPoint = Cesium.Cartesian3.add(
+    position,
+    offset,
+    new Cesium.Cartesian3(),
+  );
+  // Добавление линии оси
+  const line = viewer.entities.add({
+    polyline: {
+      name,
+      positions: [
+        startPoint,
+        Cesium.Cartesian3.add(position, axisVector, new Cesium.Cartesian3()),
+      ],
+      width: 10.0,
+      material: Cesium.Color[color],
+      clampToGround: false,
     },
     properties: {
-      name: "R",
+      axis: axisVector,
+      name,
+      movement: true, // Флаг для перемещения
     },
-  }); */
-//halfCircle.name = "R";
-// data.push(halfCircle);
-/*  console.log(viewer.entities); */
+  });
+  return line;
+}
+function isRotationActive(element) {
+  return (
+    element?.id?.name === "R" ||
+    element?.primitive?.name === "R" ||
+    element?.name === "R"
+  );
+}
+function isCoordinateClick(el) {
+  return (
+    el.id?.properties?.name?.toString() === "Z" ||
+    el.id?.properties?.name?.toString() === "Y" ||
+    el.id?.properties?.name?.toString() === "X" ||
+    el?.id?.name === "R" ||
+    el?.name === "R" ||
+    el?.primitive?.name === "R" ||
+    el.properties?.name?.getValue() === "R"
+  );
+}
+
+/* function debounce(func, wait) {
+  let timeout;
+  if (isDragging) {
+    // cameraBlockBehavior(false);
+  }
+  return function () {
+    const context = this;
+
+    const args = arguments;
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      //isDragging = false;
+      func.apply(context, args);
+    }, wait);
+  };
+}
+const debouncedMouseMove = debounce(listenMouseMove, 50); // Вызываем функцию каждые 100 мс */
