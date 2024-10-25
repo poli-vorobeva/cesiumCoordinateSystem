@@ -22,10 +22,29 @@ const lat = 55.753428;
 const center = Cesium.Cartesian3.fromDegrees(lon, lat, HEIGHT);
 const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 const draw = () => {
-  drawScene();
+  drawScene().then(() => drawRectangles());
   clickHandler();
 };
 
+const nameArrows = ["cyl-X", "cyl-Y", "cyl-Z"];
+const nameRectangles = ["rect-X", "rect-Y", "rect-Z"];
+const arrowProperties = {
+  X: {
+    degreesX: 0,
+    degreesY: 90,
+    degreesZ: 0,
+  },
+  Y: {
+    degreesX: -90,
+    degreesY: 0,
+    degreesZ: 0,
+  },
+  Z: {
+    degreesX: 0,
+    degreesY: 0,
+    degreesZ: 0,
+  },
+};
 async function drawScene() {
   const radius = 30;
   const len = 40;
@@ -58,6 +77,7 @@ async function drawScene() {
     zAxisDerectionOffset,
     new Cesium.Cartesian3(),
   );
+  console.log("coordSystemCenter", coordSystemCenter);
   //сфера примитив
   var sphere = drawSphere(radius, coordSystemCenter);
 
@@ -83,15 +103,9 @@ async function drawScene() {
   Cesium.Cartesian3.normalize(yAxisDirection, yAxisDirection);
   Cesium.Cartesian3.multiplyByScalar(yAxisDirection, -len, yAxisDirection);
 
-  //оси xyz
-
-  const xAxis = addAxis(len, coordSystemCenter, xAxisDirection, "RED", "X");
-  const yAxis = addAxis(len, coordSystemCenter, yAxisDirection, "GREEN", "Y");
-  const zAxis = addAxis(len, coordSystemCenter, zAxisDirection, "PINK", "Z");
-  data.push(zAxis);
   //полукруг
 
-  const an = -Math.PI / 20;
+  const an = Math.PI / 20;
   const positions = [];
   const cartographic = Cesium.Cartographic.fromCartesian(coordSystemCenter);
 
@@ -103,9 +117,15 @@ async function drawScene() {
 
   const originalMatrix =
     Cesium.Transforms.eastNorthUpToFixedFrame(adjustedPosition);
+  //оси xyz
+
+  const xAxis = addAxis(len, "RED", "X", originalMatrix);
+  const yAxis = addAxis(len, "GREEN", "Y", originalMatrix);
+  const zAxis = addAxis(len, "PINK", "Z", originalMatrix);
+  data.push(zAxis, yAxis, xAxis);
 
   for (let i = 0; i <= 20; i++) {
-    const ang = an * i;
+    const ang = an * i - Math.PI / 4;
     const x = radius * Math.cos(ang);
     const y = radius * Math.sin(ang);
     positions.push(new Cesium.Cartesian3(x, y, 0));
@@ -159,7 +179,10 @@ async function drawScene() {
   halfCircle.name = "R";
   data.push(halfCircle);
   viewer.scene.primitives.add(halfCircle);
-  viewer.zoomTo(viewer.entities);
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(lon, lat, HEIGHT),
+    duration: 1,
+  });
 }
 
 const button = document.getElementById("draw");
@@ -187,6 +210,17 @@ function getCartesian3ByClick(matrix, click) {
   );
 }
 const moveElements = (click) => {
+  console.log("c", click);
+  console.log("primitive", primitive);
+
+  const { longitude, latitude, height } = getModelCoordinates(
+    primitive.primitive.modelMatrix,
+  );
+  //todo у высоты вычесть подъем наверх
+  changeInputValue("lat", latitude.toFixed(5));
+  changeInputValue("lon", longitude.toFixed(5));
+  changeInputValue("h", height.toFixed(0));
+
   const inverse = viewer.camera.inverseViewMatrix;
   if (click.startPosition.y === click.endPosition.y) return;
 
@@ -197,7 +231,7 @@ const moveElements = (click) => {
     cartesianStart,
     new Cesium.Cartesian3(),
   );
-  const axisVector = primitive.id?.properties.axis.getValue();
+  const axisVector = primitive.primitive.axis;
   const axisvectorMagnitude = Cesium.Cartesian3.magnitude(axisVector);
   let dot = Cesium.Cartesian3.dot(sub, axisVector);
 
@@ -210,17 +244,43 @@ const moveElements = (click) => {
   );
 
   const offsetWithoutCollect = Cesium.Matrix4.fromTranslation(translation);
+  const arrows = data.filter((item) => nameArrows.includes(item.name));
+  arrows.forEach((arrow) => {
+    Cesium.Matrix4.multiply(
+      offsetWithoutCollect,
+      arrow.modelMatrix,
+      arrow.modelMatrix,
+    );
+  });
+
+  const lines = data.filter((item) => ["X", "Y", "Z"].includes(item.name));
+  lines.forEach((line) => {
+    Cesium.Matrix4.multiply(
+      offsetWithoutCollect,
+      line.modelMatrix,
+      line.modelMatrix,
+    );
+  });
+
+  const rectangles = data.filter((item) => nameRectangles.includes(item.name));
+  rectangles.forEach((rectangle) => {
+    Cesium.Matrix4.multiply(
+      offsetWithoutCollect,
+      rectangle.modelMatrix,
+      rectangle.modelMatrix,
+    );
+  });
 
   Cesium.Matrix4.multiply(
     offsetWithoutCollect,
     model.modelMatrix,
     model.modelMatrix,
   );
-  Cesium.Matrix4.multiply(
-    offsetWithoutCollect,
-    primitive.primitive.modelMatrix,
-    primitive.primitive.modelMatrix,
-  );
+  // Cesium.Matrix4.multiply(
+  //   offsetWithoutCollect,
+  //   primitive.primitive.modelMatrix,
+  //   primitive.primitive.modelMatrix,
+  // );
   const halfCircle = data.find(isRotationActive);
   if (halfCircle) {
     Cesium.Matrix4.multiply(
@@ -282,8 +342,28 @@ function listenMouseMove(click) {
 
 function listenMouseDown(click) {
   const t = viewer.scene.drillPick(click.position).find(isCoordinateClick);
+  const arrowName = !t
+    ? viewer.scene
+        .drillPick(click.position)
+        .find((item) => nameArrows.includes(item?.primitive?.name))?.primitive
+        ?.name
+    : undefined;
+  const rectangleName = !t
+    ? viewer.scene
+        .drillPick(click.position)
+        .find((item) => nameRectangles.includes(item?.primitive?.name))
+        ?.primitive?.name
+    : undefined;
   if (t) {
     primitive = t;
+    cameraBlockBehavior(false);
+  } else if (arrowName || rectangleName) {
+    const name = (itemName) =>
+      arrowName ? "cyl-" + itemName : "rect-" + itemName;
+    const lineFromData = data.find(
+      (item) => name(item.name) === (arrowName || rectangleName),
+    );
+    primitive = { primitive: lineFromData };
     cameraBlockBehavior(false);
   } else {
     cameraBlockBehavior(true);
@@ -412,49 +492,66 @@ function drawSphere(radius, coordSystemCenter) {
   });
   return sphere;
 }
-function normalizeVector(vector) {
-  const magnitude = Cesium.Cartesian3.magnitude(vector);
-  if (magnitude === 0) {
-    //const config = {
-    //   type: 'error',
-    //  message: 'Не удается нормализовать вектор нулевой длины',
-    //  duration: 7000,
-    //};
-    // this.snackbarService.open(config);
-    //return;
-  }
-  return Cesium.Cartesian3.normalize(vector, new Cesium.Cartesian3());
-}
-function addAxis(len, position, axisVector, color, name) {
-  const normalizedAxis = normalizeVector(axisVector); // Нормализация с проверкой
-  const offset = Cesium.Cartesian3.multiplyByScalar(
-    normalizedAxis,
-    len / 10,
-    new Cesium.Cartesian3(),
+
+function addAxis(len, color, name, originalMatrix) {
+  const startPoint = new Cesium.Cartesian3(
+    name === "X" ? len / 10 : 0,
+    name === "Y" ? len / 10 : 0,
+    name == "Z" ? len / 10 : 0,
   );
-  const startPoint = Cesium.Cartesian3.add(
-    position,
-    offset,
-    new Cesium.Cartesian3(),
+  const endPoint = new Cesium.Cartesian3(
+    name === "X" ? len : 0,
+    name === "Y" ? len : 0,
+    name == "Z" ? len : 0,
   );
   // Добавление линии оси
-  const line = viewer.entities.add({
-    polyline: {
-      name,
-      positions: [
-        startPoint,
-        Cesium.Cartesian3.add(position, axisVector, new Cesium.Cartesian3()),
-      ],
-      width: 10.0,
-      material: Cesium.Color[color],
-      clampToGround: false,
-    },
-    properties: {
-      axis: axisVector,
-      name,
-      movement: true, // Флаг для перемещения
-    },
+  const polylineGeometry = new Cesium.PolylineGeometry({
+    positions: [startPoint, endPoint],
+    width: 10.0,
+    vertexFormat: Cesium.PolylineMaterialAppearance.VERTEX_FORMAT,
   });
+  const geometryInstance = new Cesium.GeometryInstance({
+    geometry: polylineGeometry,
+    attributes: {
+      color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+        Cesium.Color[color],
+      ),
+    },
+    id: name,
+  });
+  const line = viewer.scene.primitives.add(
+    new Cesium.Primitive({
+      geometryInstances: geometryInstance,
+      modelMatrix: originalMatrix,
+      appearance: new Cesium.PolylineMaterialAppearance({
+        material: Cesium.Material.fromType("Color", {
+          color: Cesium.Color[color],
+        }),
+      }),
+    }),
+  );
+  const rotateMatrix = Cesium.Matrix4.getMatrix3(
+    originalMatrix,
+    new Cesium.Matrix3(),
+  );
+  const axisVector = Cesium.Matrix3.multiplyByVector(
+    rotateMatrix,
+    endPoint,
+    new Cesium.Cartesian3(),
+  );
+  line.axis = Cesium.Cartesian3.normalize(axisVector, axisVector);
+  line.movement = true; // флаг перемещения
+  line.name = name;
+  const cylinder = addCylinder(
+    color,
+    endPoint,
+    originalMatrix,
+    name,
+    arrowProperties[name].degreesX,
+    arrowProperties[name].degreesY,
+    arrowProperties[name].degreesZ,
+  );
+  data.push(cylinder);
   return line;
 }
 function isRotationActive(element) {
@@ -466,9 +563,9 @@ function isRotationActive(element) {
 }
 function isCoordinateClick(el) {
   return (
-    el.id?.properties?.name?.toString() === "Z" ||
-    el.id?.properties?.name?.toString() === "Y" ||
-    el.id?.properties?.name?.toString() === "X" ||
+    el.id === "Z" ||
+    el.id === "Y" ||
+    el.id === "X" ||
     el?.id?.name === "R" ||
     el?.name === "R" ||
     el?.primitive?.name === "R" ||
@@ -493,3 +590,340 @@ function isCoordinateClick(el) {
   };
 }
 const debouncedMouseMove = debounce(listenMouseMove, 50); // Вызываем функцию каждые 100 мс */
+
+function addCylinder(
+  color,
+  position,
+  modelMatrix,
+  name,
+  degreesX,
+  degreesY,
+  degreesZ,
+) {
+  // добавление цилиндра. degrees - углы в градусах для вращения по каждой из осей X, Y и Z.
+  const cylinder = new Cesium.CylinderGeometry({
+    length: 4, // Высота цилиндра
+    topRadius: 0, // Радиус верхней части (0 делает его конусом)
+    bottomRadius: 2, // Радиус нижней части цилиндра
+  });
+
+  // Преобразование углы из градусов в радианы
+  const rotationAngleX = Cesium.Math.toRadians(degreesX);
+  const rotationAngleY = Cesium.Math.toRadians(degreesY);
+  const rotationAngleZ = Cesium.Math.toRadians(degreesZ);
+
+  // кватернионы для вращения по осям
+  const quaternionX = Cesium.Quaternion.fromAxisAngle(
+    // Представление вращения как кватерниона
+    new Cesium.Cartesian3(1, 0, 0), // Ось X
+    rotationAngleX, // Угол вращения
+  );
+  const rotationMatrixX = Cesium.Matrix3.fromQuaternion(quaternionX);
+
+  const quaternionY = Cesium.Quaternion.fromAxisAngle(
+    new Cesium.Cartesian3(0, 1, 0), // Ось Y
+    rotationAngleY, // Угол вращения
+  );
+  const rotationMatrixY = Cesium.Matrix3.fromQuaternion(quaternionY);
+
+  const quaternionZ = Cesium.Quaternion.fromAxisAngle(
+    new Cesium.Cartesian3(0, 0, 1),
+    rotationAngleZ,
+  );
+  const rotationMatrixZ = Cesium.Matrix3.fromQuaternion(quaternionZ);
+
+  // Комбинируем матрицы вращения (сначала X с Y, затем с Z)
+  let combinedRotationMatrix = Cesium.Matrix3.multiply(
+    rotationMatrixX, // Вращение по X
+    rotationMatrixY, // Вращение по Y
+    new Cesium.Matrix3(),
+  );
+  combinedRotationMatrix = Cesium.Matrix3.multiply(
+    combinedRotationMatrix, // Результат вращения по X и Y
+    rotationMatrixZ, // Вращение по Z
+    combinedRotationMatrix,
+  );
+  console.log("bef", combinedRotationMatrix);
+  const combineRotateTranslateMatrix = Cesium.Matrix4.fromRotationTranslation(
+    combinedRotationMatrix,
+    position,
+    new Cesium.Matrix4(),
+  );
+
+  // Применяем комбинированное вращение к модельной матрице цилиндра
+  //const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position); // матрица трансформации для позиции цилиндра
+  const cloneModelMatrix = Cesium.Matrix4.clone(modelMatrix);
+
+  Cesium.Matrix4.multiply(
+    cloneModelMatrix, // Исходная матрица
+    combineRotateTranslateMatrix, // Комбинированная матрица вращения
+    cloneModelMatrix, // Результат сохраняется в этой же матрице
+  );
+
+  // экземпляр геометрии цилиндра с комбинированной модельной матрицей
+  const geometry = new Cesium.GeometryInstance({
+    geometry: cylinder, // Геометрия цилиндра
+    modelMatrix: cloneModelMatrix, // Модельная матрица с примененным вращением
+  });
+
+  const cylinderPrimitive = new Cesium.Primitive({
+    geometryInstances: geometry,
+    appearance: new Cesium.MaterialAppearance({
+      material: Cesium.Material.fromType("Color", {
+        color: Cesium.Color[color],
+      }),
+    }),
+    properties: {
+      name: `cyl-${name}`,
+    },
+  });
+  cylinderPrimitive.name = `cyl-${name}`;
+
+  viewer.scene.primitives.add(cylinderPrimitive);
+
+  return cylinderPrimitive;
+}
+
+function drawRectangles() {
+  const heightAboveGround = 0; // HEIGHT; // Высота над землей
+
+  const getSurfaceNormal = () => {
+    const surfaceNormal = new Cesium.Cartesian3();
+    Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(center, surfaceNormal);
+    return surfaceNormal;
+  };
+  const surfaceNormal = getSurfaceNormal();
+  const radiusOffset = model.boundingSphere.radius;
+
+  const zAxisDerectionOffset = Cesium.Cartesian3.multiplyByScalar(
+    surfaceNormal,
+    radiusOffset,
+    new Cesium.Cartesian3(),
+  );
+  let newCenter = Cesium.Cartesian3.add(
+    center,
+    zAxisDerectionOffset,
+    new Cesium.Cartesian3(),
+  );
+  console.log("newCenter", newCenter);
+  const cartographic = Cesium.Cartographic.fromCartesian(newCenter);
+
+  const adjustedPosition = Cesium.Cartesian3.fromRadians(
+    cartographic.longitude,
+    cartographic.latitude,
+    cartographic.height,
+  );
+
+  const originalMatrix =
+    Cesium.Transforms.eastNorthUpToFixedFrame(adjustedPosition);
+
+  newCenter = new Cesium.Cartesian3();
+  // ГОЛУБОЙ КВАДРАТ
+  const centerBlue = new Cesium.Cartesian3(
+    newCenter.x + 50, // сдвиг квадрата относительно центра
+    newCenter.y + 40,
+    newCenter.z - 10,
+  ); // смещение от центра сферы
+
+  const positionsBlue = makePositionRectangle(centerBlue, 20, 20); // ширина и высота указывается в зависимости от расположения
+
+  const blueRectangle = addRectangle(
+    // new Cesium.PolygonHierarchy(positionsBlue),
+    new Cesium.Cartesian3(40, 40, 0),
+    20,
+    20,
+    1,
+    "BLUE",
+    "Z",
+    originalMatrix,
+  );
+
+  // ЗЕЛЕНЫЙ КВАДРАТ
+  const centerGreen = new Cesium.Cartesian3(
+    newCenter.x + 50,
+    newCenter.y,
+    newCenter.z,
+  ); // смещение от центра сферы
+
+  const positionsGreen = makePositionRectangle(centerGreen, 20, 1); //если сделать 20, 20 то будет куб. А так это тощий куб.
+
+  const greenRectangle = addRectangle(
+    new Cesium.Cartesian3(40, 0, 40),
+    20,
+    1,
+    20,
+    "GREEN",
+    "Y",
+    originalMatrix,
+  );
+
+  // КРАСНЫЙ КВАДРАТ
+  const centerRed = new Cesium.Cartesian3(
+    newCenter.x,
+    newCenter.y + 40,
+    newCenter.z,
+  ); // смещение от центра сферы
+
+  const positionsRed = makePositionRectangle(centerRed, 1, 20);
+
+  const redRectangle = addRectangle(
+    new Cesium.Cartesian3(0, 40, 40),
+    1,
+    20,
+    20,
+    "RED",
+    "X",
+    originalMatrix,
+  );
+  console.log("**");
+  data.push(redRectangle, greenRectangle, blueRectangle);
+  console.log("@@@");
+}
+
+function makePositionRectangle(center, width, height) {
+  const halfWidth = width / 2;
+
+  const halfHeight = height / 2;
+
+  return [
+    new Cesium.Cartesian3(
+      center.x - halfWidth,
+      center.y - halfHeight,
+      center.z,
+    ), // нижний левый угол
+
+    new Cesium.Cartesian3(
+      center.x + halfWidth,
+      center.y - halfHeight,
+      center.z,
+    ), // нижний правый угол
+    new Cesium.Cartesian3(
+      center.x + halfWidth,
+      center.y + halfHeight,
+      center.z,
+    ), // верхний правый угол
+
+    new Cesium.Cartesian3(
+      center.x - halfWidth,
+      center.y + halfHeight,
+      center.z,
+    ), // верхний левый угол
+  ];
+}
+
+function addRectangle(center, xW, yW, hW, color, name, modelMatrix) {
+  //console.log(">>>", height, heightAboveGround);
+
+  const box = new Cesium.BoxGeometry({
+    //vertexFormat: Cesium.VertexFormat.POSITION_ONLY,
+    maximum: new Cesium.Cartesian3(
+      center.x + xW / 2,
+      center.y + yW / 2,
+      center.z + hW / 2,
+    ),
+    minimum: new Cesium.Cartesian3(
+      center.x - xW / 2,
+      center.y - yW / 2,
+      center.z - hW / 2,
+    ),
+  });
+  //console.log(box, "BOX");
+  const geometry = Cesium.BoxGeometry.createGeometry(box);
+  /*   const rectangleGeometry = new Cesium.PolygonGeometry({
+    polygonHierarchy: hierarchy, // Иерархия вершин полигона
+    extrudedHeight: heightAboveGround, //heightAboveGround, // Высота выдавливания (для создания объема)
+    height: height, // Базовая высота полигона
+  }); */
+  //console.log("recGEOMET", rectangleGeometry);
+  // Создаем экземпляр геометрии
+  const geometryInstance = new Cesium.GeometryInstance({
+    geometry: geometry,
+  });
+
+  const rectanglePrimitive = new Cesium.Primitive({
+    asynchronous: false,
+    geometryInstances: geometryInstance,
+    modelMatrix: modelMatrix,
+    appearance: new Cesium.MaterialAppearance({
+      material: new Cesium.Material({
+        fabric: {
+          type: "Color",
+          uniforms: {
+            color: Cesium.Color[color],
+          },
+        },
+      }),
+      renderState: {
+        depthTest: {
+          enabled: false,
+        },
+      },
+    }),
+  });
+  console.log("rectanglePrimitive", rectanglePrimitive);
+  rectanglePrimitive.name = `rect-${name}`;
+  viewer.scene.primitives.add(rectanglePrimitive);
+
+  return rectanglePrimitive;
+}
+
+const lonInput = document.getElementById("lon");
+const latInput = document.getElementById("lat");
+const heiInput = document.getElementById("h");
+const rotInput = document.getElementById("rot");
+
+heiInput.value = HEIGHT;
+lonInput.value = lon;
+latInput.value = lat;
+const inputs = {
+  lat: latInput,
+  lon: lonInput,
+  h: heiInput,
+  r: rotInput,
+};
+const changeInputValue = (inputType, value) => {
+  inputs[inputType].value = value;
+};
+const inputClick = (inputType, value) => {};
+lonInput.addEventListener("click", inputClick);
+latInput.addEventListener("click", inputClick);
+heiInput.addEventListener("click", inputClick);
+//rotInput.addEventListener("click", inputClick);
+/* function debounce(func, wait) {
+  let timeout;
+  if (isDragging) {
+    // cameraBlockBehavior(false);
+  }
+  return function () {
+    const context = this;
+
+    const args = arguments;
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      //isDragging = false;
+      func.apply(context, args);
+    }, wait);
+  };
+}
+const debouncedMouseMove = debounce(listenMouseMove, 50); // Вызываем функцию каждые 100 мс */
+
+function getModelCoordinates(modelMatrix) {
+  // Извлекаем позицию модели из modelMatrix
+  const modelPosition = new Cesium.Cartesian3();
+  Cesium.Matrix4.getColumn(modelMatrix, 3, modelPosition);
+
+  // Преобразуем в картографические координаты
+  const cartographic = Cesium.Cartographic.fromCartesian(modelPosition);
+
+  // Получаем долготу, широту и высоту
+  const longitude = Cesium.Math.toDegrees(cartographic.longitude);
+  const latitude = Cesium.Math.toDegrees(cartographic.latitude);
+
+  const height = cartographic.height;
+
+  return {
+    longitude,
+    latitude,
+    height,
+  };
+}
